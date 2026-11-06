@@ -3,6 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import AutoMinorLocator
+from matplotlib.patches import FancyBboxPatch, Rectangle
 import os
 from math import ceil 
 
@@ -101,6 +102,21 @@ def plot(
         show_lead_name = True,
         show_grid      = True,
         show_separate_line  = True,
+        highlight_leads=None,
+        p_waves=None,
+        qrs_waves=None,
+        t_waves=None,
+        pvcs=None,
+        pacs=None,
+        highlight_ranges=None,
+        highlight_range2=None,
+        highlight_color=None,
+        highlight_alpha=0.2,
+        checkmarks=None,
+        checkmark_color="black",
+        boundary_overlays=None,
+        scale=1.0,
+        stack=True,
         ):
     """Plot multi lead ECG chart.
     # Arguments
@@ -117,6 +133,7 @@ def plot(
         show_grid      : show grid
         show_separate_line  : show separate line
     """
+    highlight_color = "blue" if highlight_color is None else highlight_color
 
     if not lead_order:
         lead_order = list(range(0,len(ecg)))
@@ -124,7 +141,7 @@ def plot(
     leads = len(lead_order)
     rows  = int(ceil(leads/columns))
     # display_factor = 2.5
-    display_factor = 1
+    display_factor = scale
     line_width = 0.5
     fig, ax = plt.subplots(figsize=(secs*columns * display_factor, rows * row_height / 5 * display_factor))
     display_factor = display_factor ** 0.5
@@ -187,13 +204,185 @@ def plot(
                 step = 1.0/sample_rate
                 if(show_lead_name):
                     ax.text(x_offset + 0.07, y_offset - 0.5, lead_index[t_lead], fontsize=9 * display_factor)
+                    if highlight_leads is not None and lead_index[t_lead] in highlight_leads:
+                        bbox = FancyBboxPatch(
+                            (x_offset + 0.37, y_offset - 0.5),
+                            9.25,
+                            1,
+                            boxstyle="round,rounding_size=0.5",
+                            fc="yellow",
+                            ec="none"
+                        )
+                        ax.add_patch(bbox)
                 ax.plot(
                     np.arange(0, len(ecg[t_lead])*step, step) + x_offset, 
                     ecg[t_lead] + y_offset,
                     linewidth=line_width * display_factor, 
                     color=color_line
                     )
-        
+                if p_waves is not None:
+                    for p_wave in p_waves[t_lead]:
+                        onset = p_wave.onset
+                        offset = p_wave.offset
+                        xs = np.arange(onset * step, offset * step, step) + x_offset
+                        if len(xs) > offset - onset:
+                            xs = xs[:-1]
+                        if len(xs) == 0:
+                            continue
+
+                        ax.axvspan(
+                            xmin=xs[0],
+                            xmax=xs[-1],
+                            ymin=(min(ecg[t_lead][onset:offset]) + y_offset - y_min) / (y_max - y_min) - 0.025,
+                            ymax=(max(ecg[t_lead][onset:offset]) + y_offset - y_min) / (y_max - y_min) + 0.025,
+                            color="orange",
+                            alpha=0.5
+                        )
+
+                if qrs_waves is not None:
+                    for j, qrs_wave in enumerate(qrs_waves[t_lead]):
+                        onset = qrs_wave.onset
+                        offset = qrs_wave.offset
+                        xs = np.arange(onset * step, offset * step, step) + x_offset
+                        if len(xs) > offset - onset:
+                            xs = xs[:-1]
+                        if len(xs) == 0:
+                            continue
+
+                        color = "red"
+                        if pvcs is not None and pvcs[j]:
+                            color = "green"
+                        elif pacs is not None and pacs[j]:
+                            color = "yellow"
+
+                        ax.axvspan(
+                            xmin=xs[0],
+                            xmax=xs[-1],
+                            ymin=(min(ecg[t_lead][onset:offset]) + y_offset - y_min) / (y_max - y_min) - 0.025,
+                            ymax=(max(ecg[t_lead][onset:offset]) + y_offset - y_min) / (y_max - y_min) + 0.025,
+                            color=color,
+                            alpha=0.5
+                        )
+                if t_waves is not None:
+                    for t_wave in t_waves[t_lead]:
+                        onset = t_wave.onset
+                        offset = t_wave.offset
+                        xs = np.arange(onset * step, offset * step, step) + x_offset
+                        if len(xs) > offset - onset:
+                            xs = xs[:-1]
+                        if len(xs) == 0:
+                            continue
+
+                        ax.axvspan(
+                            xmin=xs[0],
+                            xmax=xs[-1],
+                            ymin=(min(ecg[t_lead][onset:offset]) + y_offset - y_min) / (y_max - y_min) - 0.025,
+                            ymax=(max(ecg[t_lead][onset:offset]) + y_offset - y_min) / (y_max - y_min) + 0.025,
+                            color="cyan",
+                            alpha=0.5
+                        )
+                
+                if highlight_ranges is not None:
+                    for highlight_range in highlight_ranges:
+                        onset = highlight_range[0]
+                        offset = highlight_range[1]
+                        xs = np.arange(onset * step, offset * step, step) + x_offset
+                        if len(xs) > offset - onset:
+                            xs = xs[:-1]
+                        if len(xs) == 0:
+                            continue
+
+                        ax.axvspan(
+                            xmin=xs[0],
+                            xmax=xs[-1],
+                            ymin=(min(ecg[t_lead][onset:offset]) + y_offset - y_min) / (y_max - y_min) - 0.025,
+                            ymax=(max(ecg[t_lead][onset:offset]) + y_offset - y_min) / (y_max - y_min) + 0.025,
+                            color=highlight_color,
+                            alpha=highlight_alpha
+                        )
+
+                if highlight_range2 is not None:
+                    onset = highlight_range2[0]
+                    offset = highlight_range2[1]
+                    xs = np.arange(onset * step, offset * step, step) + x_offset
+                    if len(xs) > offset - onset:
+                        xs = xs[:-1]
+                    if len(xs) == 0:
+                        continue
+
+                    ax.axvspan(
+                        xmin=xs[0],
+                        xmax=xs[-1],
+                        ymin=(min(ecg[t_lead][onset:offset]) + y_offset - y_min) / (y_max - y_min) - 0.025,
+                        ymax=(max(ecg[t_lead][onset:offset]) + y_offset - y_min) / (y_max - y_min) + 0.025,
+                        color="magenta",
+                        alpha=0.8
+                    )
+                
+                if checkmarks is not None:
+                    for x in checkmarks:
+                        ax.scatter(
+                            x=x * step + x_offset,
+                            y=max(y_offset + 0.35, max(ecg[t_lead][max(0, x-10):min(x+10, len(ecg[t_lead]))] + y_offset + 0.35)),
+                            marker=r"$\checkmark$",
+                            s=50,
+                            color=checkmark_color,
+                        )
+
+                # boundary_overlays: highlight each beat's onset..offset span as a translucent
+                # colored box, without any line over the trace. Multiple algorithms are stacked
+                # into horizontal sub-bands within the lead so their colors do not blend;
+                # single-point features (no offset) get a small marker at the fiducial.
+                if boundary_overlays is not None:
+                    _K = len(boundary_overlays)
+                    _hh = (row_height / 2) * 0.45
+                    # each algorithm is a translucent box + crisp border, drawn behind the grid
+                    # and trace. stack=True lays them out as thin gantt bars so edges line up;
+                    # stack=False draws every box full height so they overlap and blend.
+                    _stack = stack and _K > 1
+                    _sh = _hh * 0.6
+                    _bar_full = (2 * _sh) / max(_K, 1)
+                    _bar_h = _bar_full * 0.8
+                    for _k, _ov in enumerate(boundary_overlays):
+                        _waves = _ov.get("waves", {}).get(t_lead)
+                        if not _waves:
+                            continue
+                        _color = _ov.get("color", "blue")
+                        _fa = _ov.get("alpha", 0.5)          # translucent fill
+                        _ea = _ov.get("edge_alpha", 0.95)    # crisper border
+                        _elw = 1.2 * display_factor
+                        if _stack:
+                            _top = y_offset + _sh - _k * _bar_full
+                            _bot = _top - _bar_h
+                        else:
+                            _top, _bot = y_offset + _hh, y_offset - _hh
+                        for _spans in _waves.values():
+                            for _on, _off in _spans:
+                                _on = None if _on is None or (isinstance(_on, float) and np.isnan(_on)) else _on
+                                _off = None if _off is None or (isinstance(_off, float) and np.isnan(_off)) else _off
+                                if _on is not None and _off is not None:
+                                    _x0, _x1 = _on * step + x_offset, _off * step + x_offset
+                                elif _on is not None or _off is not None:
+                                    # point feature (ST at the J point): small +/-10 ms box
+                                    # around the fiducial (x axis is in seconds, so fs-independent)
+                                    _xc = (_on if _on is not None else _off) * step + x_offset
+                                    _x0, _x1 = _xc - 0.010, _xc + 0.010
+                                else:
+                                    continue
+                                # translucent fill + a more-opaque border, both behind grid/trace
+                                ax.fill_between([_x0, _x1], _bot, _top,
+                                                color=_color, alpha=_fa, linewidth=0, zorder=-5)
+                                ax.add_patch(Rectangle((_x0, _bot), _x1 - _x0, _top - _bot,
+                                                       facecolor="none", edgecolor=_color,
+                                                       linewidth=_elw, alpha=_ea, zorder=-5))
+
+    if boundary_overlays is not None:
+        from matplotlib.patches import Patch
+        _handles = [Patch(facecolor=_ov.get("color", "blue"), alpha=0.6,
+                          label=_ov.get("name", "?")) for _ov in boundary_overlays]
+        ax.legend(handles=_handles, loc="upper right", fontsize=8,
+                  framealpha=0.95, ncol=max(1, len(_handles)))
+
 
 def plot_1(ecg, sample_rate=500, title = 'ECG', fig_width = 15, fig_height = 2, line_w = 0.5, ecg_amp = 1.8, timetick = 0.2):
     """Plot multi lead ECG chart.
